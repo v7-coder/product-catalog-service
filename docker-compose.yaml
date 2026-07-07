@@ -1,0 +1,32 @@
+services:
+  pcs-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mp-pcs-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:8080"
+      - "2345:2345"
+    env_file:
+      - .env
+    volumes:
+      - ./:/app
+      - go-mod-cache:/go/pkg/mod
+    working_dir: /app
+    # Убираем air, используем dlv
+    # command: dlv debug --headless --api-version=2 --listen=:2345 --accept-multiclient --continue ./cmd/server
+    networks:
+      - marketplace-dev
+    security_opt:
+      - seccomp:unconfined
+    cap_add:
+      - SYS_PTRACE
+
+networks:
+  marketplace-dev:
+    external: true
+    name: marketplace-dev
+
+volumes:
+  go-mod-cache:
