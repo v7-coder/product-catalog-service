@@ -23,4 +23,4 @@ COPY . .
 EXPOSE 8080
 EXPOSE 2345
 
-CMD ["dlv", "debug", "--headless", "--api-version=2", "--listen=:2345", "--accept-multiclient", "--continue", "./cmd/server"]
+CMD ["dlv", "debug", "--headless", "--api-version=2", "--listen=:2345", "--accept-multiclient", "--continue", "--build-flags=-buildvcs=false", "./cmd/server"]

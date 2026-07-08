@@ -40,7 +40,7 @@ func formatError(e validator.FieldError) string {
 	field := e.Field()
 
 	switch e.Tag() {
-	case "reqquired":
+	case "required":
 		return fmt.Sprintf("%s is reqquired", field)
 	case "min":
 		return fmt.Sprintf("%s must be at least %s characters", field, e.Param())
