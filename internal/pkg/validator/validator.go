@@ -31,6 +31,7 @@ func Validate(s interface{}) error {
 		for _, e := range errs {
 			messages = append(messages, formatError(e))
 		}
+		return fmt.Errorf("%s", messages) // ← вернуть сообщения
 	}
 
 	return err
@@ -41,7 +42,7 @@ func formatError(e validator.FieldError) string {
 
 	switch e.Tag() {
 	case "required":
-		return fmt.Sprintf("%s is reqquired", field)
+		return fmt.Sprintf("%s is required", field)
 	case "min":
 		return fmt.Sprintf("%s must be at least %s characters", field, e.Param())
 	case "max":

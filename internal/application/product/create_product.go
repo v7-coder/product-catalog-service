@@ -18,11 +18,11 @@ type CreateProductResult struct {
 }
 
 type CreateProductUseCase struct {
-	// repo product.Repository // Пока без БД
+	repo product.Repository
 }
 
-func NewCreateProductUseCase() *CreateProductUseCase {
-	return &CreateProductUseCase{}
+func NewCreateProductUseCase(repo product.Repository) *CreateProductUseCase {
+	return &CreateProductUseCase{repo: repo}
 }
 
 func (uc *CreateProductUseCase) Execute(ctx context.Context, cmd CreateProductCommand) (*CreateProductResult, error) {
@@ -31,7 +31,11 @@ func (uc *CreateProductUseCase) Execute(ctx context.Context, cmd CreateProductCo
 	}
 
 	product := product.NewProduct(cmd.Name)
-	product.ID = 1
+
+	err := uc.repo.Save(ctx, product)
+	if err != nil {
+		return nil, err
+	}
 
 	return &CreateProductResult{
 		ID:   product.ID,

@@ -6,12 +6,6 @@ import (
 	"github.com/v7-coder/product-catalog-service/internal/interfaces/http/handler"
 )
 
-type Rouse struct {
-	Method  string
-	Path    string
-	Handler http.HandlerFunc
-}
-
 type Handlers struct {
 	Product *handler.ProductHandler
 }

@@ -3,5 +3,5 @@ package product
 import "context"
 
 type Repository interface {
-	Save(context.Context) error
+	Save(ctx context.Context, product *Product) error
 }
