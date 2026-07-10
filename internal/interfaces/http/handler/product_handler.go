@@ -34,7 +34,10 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cmd := product.CreateProductCommand{
-		Name: createRequest.Name,
+		Name:        createRequest.Name,
+		Description: createRequest.Description,
+		Price:       createRequest.Price,
+		CategoryId:  createRequest.CategoryId,
 	}
 
 	result, err := h.createUC.Execute(r.Context(), cmd)

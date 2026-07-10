@@ -20,8 +20,8 @@ var _ product.Repository = (*ProductRepository)(nil)
 
 func (r *ProductRepository) Save(ctx context.Context, product *product.Product) error {
 	query, args, err := sq.Insert("products").
-		Columns("name").
-		Values(product.Name).
+		Columns("name", "description", "price", "category_id").
+		Values(product.Name, product.Description, product.Price, product.CategoryId).
 		Suffix("RETURNING id").
 		PlaceholderFormat(sq.Dollar).
 		ToSql()

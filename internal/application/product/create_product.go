@@ -9,12 +9,18 @@ import (
 )
 
 type CreateProductCommand struct {
-	Name string `validate:"required,min=3"`
+	Name        string  `validate:"required,min=3,max=255"`
+	Description string  `json:"description" validate:"min=3,max=1000"`
+	Price       float64 `json:"price" validate:"required,gt=0"`
+	CategoryId  int     `json:"categoryId" validate:"required,gt=0"`
 }
 
 type CreateProductResult struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
+	ID          int     `json:"id"`
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	Price       float64 `json:"price"`
+	CategoryId  int     `json:"categoryId"`
 }
 
 type CreateProductUseCase struct {
@@ -30,7 +36,7 @@ func (uc *CreateProductUseCase) Execute(ctx context.Context, cmd CreateProductCo
 		return nil, fmt.Errorf("validation CreateProductCommand failed: %w", err)
 	}
 
-	product := product.NewProduct(cmd.Name)
+	product := product.NewProduct(cmd.Name, cmd.Description, cmd.Price, cmd.CategoryId)
 
 	err := uc.repo.Save(ctx, product)
 	if err != nil {
@@ -38,7 +44,10 @@ func (uc *CreateProductUseCase) Execute(ctx context.Context, cmd CreateProductCo
 	}
 
 	return &CreateProductResult{
-		ID:   product.ID,
-		Name: product.Name,
+		ID:          product.ID,
+		Name:        product.Name,
+		Description: product.Description,
+		Price:       product.Price,
+		CategoryId:  product.CategoryId,
 	}, nil
 }
