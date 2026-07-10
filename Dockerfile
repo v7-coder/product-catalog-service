@@ -6,18 +6,18 @@ RUN apk add --no-cache \
     gcc \
     musl-dev \
     ca-certificates \
-    tzdata \
-    && go install github.com/go-delve/delve/cmd/dlv@v1.24.0
+    tzdata
+
+RUN go install github.com/go-delve/delve/cmd/dlv@v1.24.0
+RUN go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 
 ENV PATH="/go/bin:${PATH}"
 
 WORKDIR /app
 
-# Копируем зависимости
 COPY go.mod go.sum* ./
 RUN go mod download && go mod verify
 
-# Копируем исходники
 COPY . .
 
 EXPOSE 8080

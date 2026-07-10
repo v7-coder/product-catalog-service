@@ -5,6 +5,9 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/lib/pq"
 
 	"github.com/v7-coder/product-catalog-service/internal/application/product"
@@ -28,6 +31,10 @@ func main() {
 
 	log.Println("Connected to database")
 
+	if err := runMigrations(cfg.DBUrl); err != nil {
+		log.Fatalf("migration error: %v", err)
+	}
+
 	// Domain
 	productRepo := postgres.NewProductRepository(db)
 
@@ -48,4 +55,20 @@ func main() {
 	if err := http.ListenAndServe(fmt.Sprintf(":%s", cfg.AppPort), mux); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func runMigrations(dbUrl string) error {
+	m, err := migrate.New("file://migrations", dbUrl)
+	if err != nil {
+		return err
+	}
+	defer m.Close()
+
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		return err
+	}
+
+	log.Println("Migrations applied successfully")
+
+	return nil
 }
