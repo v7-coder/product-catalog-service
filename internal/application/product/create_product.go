@@ -10,7 +10,7 @@ import (
 
 type CreateProductCommand struct {
 	Name        string  `validate:"required,min=3,max=255"`
-	Description string  `json:"description" validate:"min=3,max=1000"`
+	Description string  `json:"description" validate:"omitempty,min=3,max=1000"`
 	Price       float64 `json:"price" validate:"required,gt=0"`
 	CategoryId  int     `json:"categoryId" validate:"required,gt=0"`
 }
@@ -24,11 +24,15 @@ type CreateProductResult struct {
 }
 
 type CreateProductUseCase struct {
-	repo product.Repository
+	repo    product.Repository
+	service *product.Service
 }
 
-func NewCreateProductUseCase(repo product.Repository) *CreateProductUseCase {
-	return &CreateProductUseCase{repo: repo}
+func NewCreateProductUseCase(repo product.Repository, service *product.Service) *CreateProductUseCase {
+	return &CreateProductUseCase{
+		repo:    repo,
+		service: service,
+	}
 }
 
 func (uc *CreateProductUseCase) Execute(ctx context.Context, cmd CreateProductCommand) (*CreateProductResult, error) {
@@ -36,7 +40,16 @@ func (uc *CreateProductUseCase) Execute(ctx context.Context, cmd CreateProductCo
 		return nil, fmt.Errorf("validation CreateProductCommand failed: %w", err)
 	}
 
-	product := product.NewProduct(cmd.Name, cmd.Description, cmd.Price, cmd.CategoryId)
+	product := product.NewProduct(
+		cmd.Name,
+		cmd.Description,
+		cmd.Price,
+		cmd.CategoryId,
+	)
+
+	if err := uc.service.ValidateProduct(product); err != nil {
+		return nil, fmt.Errorf("validation product failed: %w", err)
+	}
 
 	err := uc.repo.Save(ctx, product)
 	if err != nil {

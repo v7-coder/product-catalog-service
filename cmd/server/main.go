@@ -10,8 +10,9 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/lib/pq"
 
-	"github.com/v7-coder/product-catalog-service/internal/application/product"
+	appProduct "github.com/v7-coder/product-catalog-service/internal/application/product"
 	"github.com/v7-coder/product-catalog-service/internal/config"
+	"github.com/v7-coder/product-catalog-service/internal/domain/product"
 	"github.com/v7-coder/product-catalog-service/internal/infrastructure/persistence/postgres"
 	"github.com/v7-coder/product-catalog-service/internal/interfaces/http/handler"
 	"github.com/v7-coder/product-catalog-service/internal/interfaces/http/router"
@@ -37,9 +38,10 @@ func main() {
 
 	// Domain
 	productRepo := postgres.NewProductRepository(db)
+	prductService := product.NewService()
 
 	// Application
-	createUC := product.NewCreateProductUseCase(productRepo)
+	createUC := appProduct.NewCreateProductUseCase(productRepo, prductService)
 
 	// HTTP
 	productHandler := handler.NewCreateProductHandler(createUC)
