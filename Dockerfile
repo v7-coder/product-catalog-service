@@ -1,27 +1,20 @@
-FROM golang:1.24.13-alpine
+FROM golang:1.24.13-alpine AS builder
 
-RUN apk add --no-cache \
-    git \
-    make \
-    gcc \
-    musl-dev \
-    ca-certificates \
-    tzdata
-
-RUN go install github.com/go-delve/delve/cmd/dlv@v1.24.0
-RUN go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
-
-ENV PATH="/go/bin:${PATH}"
+RUN apk add --no-cache git gcc musl-dev
 
 WORKDIR /app
-
 COPY go.mod go.sum* ./
-RUN go mod download && go mod verify
-
+RUN go mod download
 COPY . .
 
-EXPOSE 8080
-EXPOSE 2345
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /tmp/server ./cmd/server
 
-RUN go build -gcflags="all=-N -l" -o /tmp/server ./cmd/server
-CMD ["dlv", "exec", "--headless", "--api-version=2", "--listen=:2345", "--accept-multiclient", "--continue", "/tmp/server"]
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates tzdata
+WORKDIR /app
+COPY --from=builder /tmp/server .
+COPY migrations ./migrations
+
+EXPOSE 8080
+CMD ["./server"]

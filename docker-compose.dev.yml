@@ -2,7 +2,7 @@ services:
   pcs-app:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: mp-pcs-app
     restart: unless-stopped
     ports:

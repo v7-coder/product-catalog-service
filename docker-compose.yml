@@ -1,0 +1,17 @@
+services:
+  pcs-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pcs-app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file: .env
+    networks:
+      - marketplace
+
+networks:
+  marketplace:
+    external: true
+    name: marketplace
