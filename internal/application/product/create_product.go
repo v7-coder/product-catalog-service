@@ -5,14 +5,13 @@ import (
 	"fmt"
 
 	"github.com/v7-coder/product-catalog-service/internal/domain/product"
-	"github.com/v7-coder/product-catalog-service/internal/pkg/validator"
 )
 
 type CreateProductCommand struct {
-	Name        string  `validate:"required,min=3,max=255"`
-	Description string  `json:"description" validate:"omitempty,min=3,max=1000"`
-	Price       float64 `json:"price" validate:"required,gt=0"`
-	CategoryId  int     `json:"categoryId" validate:"required,gt=0"`
+	Name        string
+	Description string
+	Price       float64
+	CategoryId  int
 }
 
 type CreateProductResult struct {
@@ -24,43 +23,33 @@ type CreateProductResult struct {
 }
 
 type CreateProductUseCase struct {
-	repo    product.Repository
-	service *product.Service
+	repo product.Repository
 }
 
-func NewCreateProductUseCase(repo product.Repository, service *product.Service) *CreateProductUseCase {
+func NewCreateProductUseCase(repo product.Repository) *CreateProductUseCase {
 	return &CreateProductUseCase{
-		repo:    repo,
-		service: service,
+		repo: repo,
 	}
 }
 
 func (uc *CreateProductUseCase) Execute(ctx context.Context, cmd CreateProductCommand) (*CreateProductResult, error) {
-	if err := validator.Validate(cmd); err != nil {
-		return nil, fmt.Errorf("validation CreateProductCommand failed: %w", err)
-	}
-
-	product := product.NewProduct(
+	prod := product.NewProduct(
 		cmd.Name,
 		cmd.Description,
 		cmd.Price,
 		cmd.CategoryId,
 	)
 
-	if err := uc.service.ValidateProduct(product); err != nil {
-		return nil, fmt.Errorf("validation product failed: %w", err)
-	}
-
-	err := uc.repo.Save(ctx, product)
+	err := uc.repo.Save(ctx, prod)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("save product: %w", err)
 	}
 
 	return &CreateProductResult{
-		ID:          product.ID,
-		Name:        product.Name,
-		Description: product.Description,
-		Price:       product.Price,
-		CategoryId:  product.CategoryId,
+		ID:          prod.ID,
+		Name:        prod.Name,
+		Description: prod.Description,
+		Price:       prod.Price,
+		CategoryId:  prod.CategoryId,
 	}, nil
 }

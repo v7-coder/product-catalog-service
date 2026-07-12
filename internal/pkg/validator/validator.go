@@ -2,6 +2,7 @@ package validator
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/go-playground/validator/v10"
@@ -31,7 +32,7 @@ func Validate(s interface{}) error {
 		for _, e := range errs {
 			messages = append(messages, formatError(e))
 		}
-		return fmt.Errorf("%s", messages) // ← вернуть сообщения
+		return fmt.Errorf("%s", strings.Join(messages, "; "))
 	}
 
 	return err

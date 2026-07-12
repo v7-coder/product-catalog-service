@@ -1,0 +1,643 @@
+=== ./Dockerfile.dev ===
+FROM golang:1.24.13-alpine
+
+RUN apk add --no-cache \
+    git \
+    make \
+    gcc \
+    musl-dev \
+    ca-certificates \
+    tzdata
+
+RUN go install github.com/go-delve/delve/cmd/dlv@v1.24.0
+RUN go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+
+ENV PATH="/go/bin:${PATH}"
+
+WORKDIR /app
+
+COPY go.mod go.sum* ./
+RUN go mod download && go mod verify
+
+COPY . .
+
+EXPOSE 8080
+EXPOSE 2345
+
+CMD ["dlv", "debug", "--headless", "--api-version=2", "--listen=:2345", "--accept-multiclient", "--continue", "--build-flags=-buildvcs=false", "./cmd/server"]=== ./.env ===
+APP_PORT=8080
+DB_HOST=marketplace-db
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_NAME=mp_pcs=== ./internal/config/config.go ===
+package config
+
+import (
+	"fmt"
+	"os"
+)
+
+type Config struct {
+	AppPort string
+	DBUrl   string
+}
+
+func Load() (*Config, error) {
+	appPort := os.Getenv("APP_PORT")
+	if appPort == "" {
+		appPort = "8080"
+	}
+
+	dbHost := os.Getenv("DB_HOST")
+	dbPort := os.Getenv("DB_PORT")
+	dbUser := os.Getenv("DB_USER")
+	dbPassword := os.Getenv("DB_PASSWORD")
+	dbName := os.Getenv("DB_NAME")
+
+	switch "" {
+	case dbHost:
+		return nil, fmt.Errorf("DB_HOST is required")
+	case dbPort:
+		return nil, fmt.Errorf("DB_PORT is required")
+	case dbUser:
+		return nil, fmt.Errorf("DB_USER is required")
+	case dbName:
+		return nil, fmt.Errorf("DB_NAME is required")
+	}
+
+	dbUrl := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", dbUser, dbPassword, dbHost, dbPort, dbName)
+
+	return &Config{
+		AppPort: appPort,
+		DBUrl:   dbUrl,
+	}, nil
+}
+=== ./internal/pkg/validator/validator.go ===
+package validator
+
+import (
+	"fmt"
+	"strings"
+	"sync"
+
+	"github.com/go-playground/validator/v10"
+)
+
+var (
+	once     sync.Once
+	validate *validator.Validate
+)
+
+func getValidator() *validator.Validate {
+	once.Do(func() {
+		validate = validator.New()
+	})
+
+	return validate
+}
+
+func Validate(s interface{}) error {
+	err := getValidator().Struct(s)
+	if err == nil {
+		return nil
+	}
+
+	if errs, ok := err.(validator.ValidationErrors); ok {
+		var messages []string
+		for _, e := range errs {
+			messages = append(messages, formatError(e))
+		}
+		return fmt.Errorf("%s", strings.Join(messages, "; "))
+	}
+
+	return err
+}
+
+func formatError(e validator.FieldError) string {
+	field := e.Field()
+
+	switch e.Tag() {
+	case "required":
+		return fmt.Sprintf("%s is required", field)
+	case "min":
+		return fmt.Sprintf("%s must be at least %s characters", field, e.Param())
+	case "max":
+		return fmt.Sprintf("%s must be at most %s characters", field, e.Param())
+	default:
+		return fmt.Sprintf("%s validation failed: %s=%s", field, e.Tag(), e.Param())
+	}
+}
+=== ./internal/pkg/app/response.go ===
+package app
+
+import (
+	"encoding/json"
+	"net/http"
+)
+
+type ErrorResponse struct {
+	Error string `json:"error"`
+}
+
+type SuccessResponse struct {
+	Data interface{} `json:"data"`
+}
+
+func SendError(w http.ResponseWriter, status int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(ErrorResponse{
+		Error: message,
+	})
+}
+
+func SendSuccess(w http.ResponseWriter, status int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(SuccessResponse{
+		Data: data,
+	})
+}
+=== ./internal/infrastructure/persistence/postgres/db.go ===
+package postgres
+
+import "github.com/jmoiron/sqlx"
+
+type DB struct {
+	*sqlx.DB
+}
+
+func NewDB(dsn string) (*DB, error) {
+	db, err := sqlx.Connect("postgres", dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	return &DB{db}, nil
+}
+
+func (db *DB) Close() error {
+	return db.DB.Close()
+}
+=== ./internal/infrastructure/persistence/postgres/product_repository.go ===
+package postgres
+
+import (
+	"context"
+	"fmt"
+
+	sq "github.com/Masterminds/squirrel"
+	"github.com/v7-coder/product-catalog-service/internal/domain/product"
+)
+
+type ProductRepository struct {
+	db *DB
+}
+
+func NewProductRepository(db *DB) *ProductRepository {
+	return &ProductRepository{db: db}
+}
+
+var _ product.Repository = (*ProductRepository)(nil)
+
+func (r *ProductRepository) Save(ctx context.Context, product *product.Product) error {
+	query, args, err := sq.Insert("products").
+		Columns("name", "description", "price", "category_id").
+		Values(product.Name, product.Description, product.Price, product.CategoryId).
+		Suffix("RETURNING id").
+		PlaceholderFormat(sq.Dollar).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build insert query: %w", err)
+	}
+
+	err = r.db.QueryRowContext(ctx, query, args...).Scan(&product.ID)
+	if err != nil {
+		return fmt.Errorf("insert product: %w", err)
+	}
+
+	return nil
+}
+=== ./internal/domain/product/product.go ===
+package product
+
+type Product struct {
+	ID          int     `json:"id"`
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	Price       float64 `json:"price"`
+	CategoryId  int     `json:"categoryId"`
+}
+
+func NewProduct(name, description string, price float64, categoryId int) *Product {
+	return &Product{
+		Name:        name,
+		Description: description,
+		Price:       price,
+		CategoryId:  categoryId,
+	}
+}
+=== ./internal/domain/product/repository.go ===
+package product
+
+import "context"
+
+type Repository interface {
+	Save(ctx context.Context, product *Product) error
+}
+=== ./internal/domain/product/product_test.go ===
+package product
+
+import "testing"
+
+func TestNewProduct(t *testing.T) {
+	p := NewProduct("name", "description", 100.5, 5)
+
+	if p.Name != "name" {
+		t.Errorf("expected Name 'Тест', got '%s'", p.Name)
+	}
+	if p.Description != "description" {
+		t.Errorf("expected Description 'Описание', got '%s'", p.Description)
+	}
+	if p.Price != 100.5 {
+		t.Errorf("expected Price 100, got %f", p.Price)
+	}
+	if p.CategoryId != 5 {
+		t.Errorf("expected CategoryId 1, got %d", p.CategoryId)
+	}
+}
+=== ./internal/interfaces/http/router/routes.go ===
+package router
+
+import (
+	"net/http"
+
+	"github.com/v7-coder/product-catalog-service/internal/interfaces/http/handler"
+)
+
+type Handlers struct {
+	Product *handler.ProductHandler
+}
+
+func RegisterRoutes(mux *http.ServeMux, handlers *Handlers) {
+	// POST /api/v1/products - создание продукта
+	mux.HandleFunc("POST /api/v1/products", handlers.Product.Create)
+}
+=== ./internal/interfaces/http/handler/product_handler.go ===
+package handler
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/v7-coder/product-catalog-service/internal/application/product"
+	httpdto "github.com/v7-coder/product-catalog-service/internal/interfaces/http/dto"
+	"github.com/v7-coder/product-catalog-service/internal/pkg/app"
+	"github.com/v7-coder/product-catalog-service/internal/pkg/validator"
+)
+
+type ProductHandler struct {
+	createUC *product.CreateProductUseCase
+}
+
+func NewCreateProductHandler(createUC *product.CreateProductUseCase) *ProductHandler {
+	return &ProductHandler{createUC: createUC}
+}
+
+func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
+	var createRequest httpdto.CreateProductRequest
+
+	// Декодируем JSON
+	if err := json.NewDecoder(r.Body).Decode(&createRequest); err != nil {
+		app.SendError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+
+	if err := validator.Validate(createRequest); err != nil {
+		app.SendError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Маппинг DTO → Command (без валидации)
+	cmd := product.CreateProductCommand{
+		Name:        createRequest.Name,
+		Description: createRequest.Description,
+		Price:       createRequest.Price,
+		CategoryId:  createRequest.CategoryId,
+	}
+
+	result, err := h.createUC.Execute(r.Context(), cmd)
+	if err != nil {
+		app.SendError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	app.SendSuccess(w, http.StatusCreated, result)
+}
+=== ./internal/interfaces/http/dto/request_product.go ===
+package dto
+
+type CreateProductRequest struct {
+	Name        string  `json:"name" validate:"required,min=3,max=255"`
+	Description string  `json:"description" validate:"omitempty,min=3,max=1000"`
+	Price       float64 `json:"price" validate:"required,gt=0"`
+	CategoryId  int     `json:"categoryId" validate:"required,gt=0"`
+}
+=== ./internal/application/product/create_product.go ===
+package product
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/v7-coder/product-catalog-service/internal/domain/product"
+)
+
+type CreateProductCommand struct {
+	Name        string
+	Description string
+	Price       float64
+	CategoryId  int
+}
+
+type CreateProductResult struct {
+	ID          int     `json:"id"`
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	Price       float64 `json:"price"`
+	CategoryId  int     `json:"categoryId"`
+}
+
+type CreateProductUseCase struct {
+	repo product.Repository
+}
+
+func NewCreateProductUseCase(repo product.Repository) *CreateProductUseCase {
+	return &CreateProductUseCase{
+		repo: repo,
+	}
+}
+
+func (uc *CreateProductUseCase) Execute(ctx context.Context, cmd CreateProductCommand) (*CreateProductResult, error) {
+	prod := product.NewProduct(
+		cmd.Name,
+		cmd.Description,
+		cmd.Price,
+		cmd.CategoryId,
+	)
+
+	err := uc.repo.Save(ctx, prod)
+	if err != nil {
+		return nil, fmt.Errorf("save product: %w", err)
+	}
+
+	return &CreateProductResult{
+		ID:          prod.ID,
+		Name:        prod.Name,
+		Description: prod.Description,
+		Price:       prod.Price,
+		CategoryId:  prod.CategoryId,
+	}, nil
+}
+=== ./docker-compose.dev.yml ===
+services:
+  pcs-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: mp-pcs-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:8080"
+      - "2345:2345"
+    env_file:
+      - .env
+    volumes:
+      - ./:/app
+      - go-mod-cache:/go/pkg/mod
+    working_dir: /app
+    # Убираем air, используем dlv
+    # command: dlv debug --headless --api-version=2 --listen=:2345 --accept-multiclient --continue ./cmd/server
+    networks:
+      - marketplace-dev
+    security_opt:
+      - seccomp:unconfined
+    cap_add:
+      - SYS_PTRACE
+
+networks:
+  marketplace-dev:
+    external: true
+    name: marketplace-dev
+
+volumes:
+  go-mod-cache:=== ./.env.dist ===
+APP_PORT=8080
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_NAME=mp_pcs=== ./Dockerfile ===
+FROM golang:1.24.13-alpine AS builder
+
+RUN apk add --no-cache git gcc musl-dev
+
+WORKDIR /app
+COPY go.mod go.sum* ./
+RUN go mod download
+COPY . .
+
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /tmp/server ./cmd/server
+
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates tzdata
+WORKDIR /app
+COPY --from=builder /tmp/server .
+COPY migrations ./migrations
+
+EXPOSE 8080
+CMD ["./server"]=== ./docker-compose.yml ===
+services:
+  pcs-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pcs-app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file: .env
+    networks:
+      - marketplace
+
+networks:
+  marketplace:
+    external: true
+    name: marketplace=== ./cmd/server/main.go ===
+package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+	"time"
+
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+	_ "github.com/lib/pq"
+
+	appProduct "github.com/v7-coder/product-catalog-service/internal/application/product"
+	"github.com/v7-coder/product-catalog-service/internal/config"
+	"github.com/v7-coder/product-catalog-service/internal/infrastructure/persistence/postgres"
+	"github.com/v7-coder/product-catalog-service/internal/interfaces/http/handler"
+	"github.com/v7-coder/product-catalog-service/internal/interfaces/http/router"
+)
+
+func main() {
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("config error: %v", err)
+	}
+
+	db, err := connectWithRetry(cfg.DBUrl)
+	if err != nil {
+		log.Fatalf("database connection: %v", err)
+	}
+	defer db.Close()
+
+	log.Println("Connected to database")
+
+	if err := runMigrations(cfg.DBUrl); err != nil {
+		log.Fatalf("migration error: %v", err)
+	}
+
+	// Domain
+	productRepo := postgres.NewProductRepository(db)
+
+	// Application
+	createUC := appProduct.NewCreateProductUseCase(productRepo)
+
+	// HTTP
+	productHandler := handler.NewCreateProductHandler(createUC)
+
+	handlers := &router.Handlers{
+		Product: productHandler,
+	}
+
+	mux := http.NewServeMux()
+	router.RegisterRoutes(mux, handlers)
+
+	log.Println("Starting http server on port:", cfg.AppPort)
+	if err := http.ListenAndServe(fmt.Sprintf(":%s", cfg.AppPort), mux); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func connectWithRetry(dbUrl string) (*postgres.DB, error) {
+	var db *postgres.DB
+	var err error
+
+	for i := 0; i < 30; i++ {
+		db, err = postgres.NewDB(dbUrl)
+		if err == nil {
+			log.Println("Connected to database")
+			return db, nil
+		}
+		log.Printf("Waiting for database... (attempt %d/30)", i+1)
+		time.Sleep(time.Second)
+	}
+
+	return nil, fmt.Errorf("database not available after 30 attempts: %w", err)
+}
+
+func runMigrations(dbUrl string) error {
+	m, err := migrate.New("file://migrations", dbUrl)
+	if err != nil {
+		return err
+	}
+	defer m.Close()
+
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		return err
+	}
+
+	log.Println("Migrations applied successfully")
+
+	return nil
+}
+=== ./.vscode/keybindings.json ===
+[
+    {
+        "key": "alt+q",
+        "command": "extension.multiCommand.execute",
+        "args": {
+            "sequence": [
+                "workbench.action.debug.disconnect",
+                "workbench.action.debug.start"
+            ]
+        },
+        "when": "inDebugMode"
+    }
+]=== ./.vscode/launch.json ===
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Attach to Docker",
+            "type": "go",
+            "request": "attach",
+            "mode": "remote",
+            "remotePath": "/app",
+            "port": 2345,
+            "host": "127.0.0.1",
+            "substitutePath": [
+                {
+                    "from": "${workspaceFolder}",
+                    "to": "/app"
+                }
+            ]
+        }
+    ]
+}=== ./migrations/000001_init_schema.up.sql ===
+CREATE TABLE products (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    price DECIMAL(10,2) NOT NULL,
+    category_id INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_products_category_id ON products(category_id);=== ./migrations/000001_init_schema.down.sql ===
+DROP TABLE products;=== ./Makefile ===
+.PHONY: up down restart build logs up-prod down-prod logs-prod
+
+# === Dev ===
+up:
+	docker compose -f docker-compose.dev.yml up -d
+
+down:
+	docker compose -f docker-compose.dev.yml down
+
+restart:
+	docker compose -f docker-compose.dev.yml restart
+
+build:
+	docker compose -f docker-compose.dev.yml up -d --build
+
+logs:
+	docker compose -f docker-compose.dev.yml logs -f
+
+# === Prod ===
+up-prod:
+	docker compose up -d
+
+down-prod:
+	docker compose down
+
+logs-prod:
+	docker compose logs -f

@@ -21,18 +21,18 @@ func NewCreateProductHandler(createUC *product.CreateProductUseCase) *ProductHan
 func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var createRequest httpdto.CreateProductRequest
 
-	// Ошибка декодирования JSON
+	// Декодируем JSON
 	if err := json.NewDecoder(r.Body).Decode(&createRequest); err != nil {
-		app.SendError(w, http.StatusBadRequest, err.Error())
+		app.SendError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return
 	}
 
-	// Ошибка валидации
 	if err := validator.Validate(createRequest); err != nil {
 		app.SendError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
+	// Маппинг DTO → Command (без валидации)
 	cmd := product.CreateProductCommand{
 		Name:        createRequest.Name,
 		Description: createRequest.Description,
@@ -42,7 +42,6 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.createUC.Execute(r.Context(), cmd)
 	if err != nil {
-		// Ошибка бизнес-логики
 		app.SendError(w, http.StatusBadRequest, err.Error())
 		return
 	}
