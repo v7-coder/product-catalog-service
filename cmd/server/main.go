@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -24,9 +25,9 @@ func main() {
 		log.Fatalf("config error: %v", err)
 	}
 
-	db, err := postgres.NewDB(cfg.DBUrl)
+	db, err := connectWithRetry(cfg.DBUrl)
 	if err != nil {
-		log.Fatalf("config error: %v", err)
+		log.Fatalf("database connection: %v", err)
 	}
 	defer db.Close()
 
@@ -57,6 +58,23 @@ func main() {
 	if err := http.ListenAndServe(fmt.Sprintf(":%s", cfg.AppPort), mux); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func connectWithRetry(dbUrl string) (*postgres.DB, error) {
+	var db *postgres.DB
+	var err error
+
+	for i := 0; i < 30; i++ {
+		db, err = postgres.NewDB(dbUrl)
+		if err == nil {
+			log.Println("Connected to database")
+			return db, nil
+		}
+		log.Printf("Waiting for database... (attempt %d/30)", i+1)
+		time.Sleep(time.Second)
+	}
+
+	return nil, fmt.Errorf("database not available after 30 attempts: %w", err)
 }
 
 func runMigrations(dbUrl string) error {
