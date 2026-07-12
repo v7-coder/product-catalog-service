@@ -1,6 +1,10 @@
 package postgres
 
-import "github.com/jmoiron/sqlx"
+import (
+	"time"
+
+	"github.com/jmoiron/sqlx"
+)
 
 type DB struct {
 	*sqlx.DB
@@ -11,6 +15,10 @@ func NewDB(dsn string) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	db.SetMaxOpenConns(25) // Максимум открытых соединений
+	db.SetMaxIdleConns(10) // Простаивающие соединения
+	db.SetConnMaxLifetime(5 * time.Minute)
 
 	return &DB{db}, nil
 }

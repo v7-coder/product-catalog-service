@@ -37,7 +37,10 @@ func main() {
 	}
 
 	// Domain
-	productRepo := postgres.NewProductRepository(db)
+	productRepo, err := postgres.NewProductRepository(db)
+	if err != nil {
+		log.Fatalf("create product repository: %v", err)
+	}
 
 	// Application
 	createUC := appProduct.NewCreateProductUseCase(productRepo)
