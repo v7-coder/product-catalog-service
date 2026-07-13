@@ -3,3 +3,4 @@
 .air.toml.bak
 tmp/
 __debug_bin*
+load_test_results/

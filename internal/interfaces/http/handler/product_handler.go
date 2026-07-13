@@ -32,7 +32,6 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Маппинг DTO → Command (без валидации)
 	cmd := product.CreateProductCommand{
 		Name:        createRequest.Name,
 		Description: createRequest.Description,

@@ -16,6 +16,7 @@ var (
 func getValidator() *validator.Validate {
 	once.Do(func() {
 		validate = validator.New()
+		validate.SetTagName("validate")
 	})
 
 	return validate
