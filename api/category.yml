@@ -1,0 +1,43 @@
+paths:
+  /categories:
+    get:
+      summary: "Список категорий"
+      parameters:
+        - name: limit (query, int, default=50)
+        - name: offset (query, int, default=0)
+      response: массив Category
+
+    post:
+      summary: "Создать категорию"
+      body:
+        name: string (required, min=1, max=100)
+        description: string (опционально)
+      response: Category
+
+  /categories/{id}:
+    get:
+      summary: "Категория по ID"
+      param: id (int, in path)
+      response: Category
+
+    put:
+      summary: "Обновить категорию"
+      param: id (int, in path)
+      body:
+        name: string (required, min=1, max=100)
+        description: string (опционально)
+      response: Category
+
+    delete:
+      summary: "Удалить категорию"
+      param: id (int, in path)
+      response: { success: true }
+
+components:
+  schemas:
+    Category:
+      id: int
+      name: string
+      description: string
+      created_at: datetime
+      updated_at: datetime

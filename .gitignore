@@ -4,3 +4,5 @@
 tmp/
 __debug_bin*
 load_test_results/
+project_full_dump.txt
+project_structure.txt

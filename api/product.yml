@@ -1,0 +1,49 @@
+paths:
+  /products:
+    get:
+      summary: "Список продуктов с пагинацией"
+      parameters:
+        - name: limit (query, int, default=50)
+        - name: offset (query, int, default=0)
+      response: массив Product
+
+    post:
+      summary: "Создать продукт"
+      body:
+        name: string (required, min=3, max=255)
+        description: string (опционально, max=1000)
+        price: float (required, gt=0)
+        categoryId: int (required, gt=0)
+      response: Product
+
+  /products/{productId}:
+    get:
+      summary: "Продукт по ID"
+      param: productId (int, in path)
+      response: Product
+
+    put:
+      summary: "Обновить продукт"
+      param: productId (int, in path)
+      body:
+        name: string (required, min=3, max=255)
+        description: string (опционально, max=1000)
+        price: float (required, gt=0)
+        categoryId: int (required, gt=0)
+      response: Product
+
+    delete:
+      summary: "Удалить продукт"
+      param: productId (int, in path)
+      response: { success: true }
+
+components:
+  schemas:
+    Product:
+      id: int
+      name: string
+      description: string
+      price: float
+      categoryId: int
+      created_at: datetime
+      updated_at: datetime

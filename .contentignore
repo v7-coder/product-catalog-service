@@ -1,0 +1,10 @@
+air.toml.back
+docker-compose*.yml
+Dockerfile*
+.env.dist
+*.sum
+*.sh
+Makefile
+nginx.conf
+.contentignore
+.generatetreeignore
