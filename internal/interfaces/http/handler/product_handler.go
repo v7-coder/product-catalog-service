@@ -19,6 +19,8 @@ func NewCreateProductHandler(createUC *product.CreateProductUseCase) *ProductHan
 }
 
 func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
 	var createRequest httpdto.CreateProductRequest
 
 	// Декодируем JSON
