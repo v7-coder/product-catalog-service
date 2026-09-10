@@ -16,6 +16,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/lib/pq"
 
+	appCategory "github.com/v7-coder/product-catalog-service/internal/application/category"
 	appProduct "github.com/v7-coder/product-catalog-service/internal/application/product"
 	"github.com/v7-coder/product-catalog-service/internal/config"
 	"github.com/v7-coder/product-catalog-service/internal/infrastructure/persistence/postgres"
@@ -117,12 +118,42 @@ func configureServer(appConfig *config.Config, db *postgres.DB) (*http.Server, e
 		return nil, fmt.Errorf("create product repository: %w", err)
 	}
 
-	createUC := appProduct.NewCreateProductUseCase(productRepo)
+	categoryRepo, err := postgres.NewCategoryRepository(db)
+	if err != nil {
+		return nil, fmt.Errorf("create category repository: %w", err)
+	}
 
-	productHandler := handler.NewCreateProductHandler(createUC)
+	createProductUC := appProduct.NewCreateProductUseCase(productRepo)
+	getProductUC := appProduct.NewGetProductUseCase(productRepo)
+	getProductsUC := appProduct.NewGetProductsUseCase(productRepo)
+	updateProductUC := appProduct.NewUpdateProductUseCase(productRepo)
+	deleteProductUC := appProduct.NewDeleteProductUseCase(productRepo)
+
+	createCategoryUC := appCategory.NewCreateCategoryUseCase(categoryRepo)
+	getCategoryUC := appCategory.NewGetCategoryUseCase(categoryRepo)
+	getCategoriesUC := appCategory.NewGetCategoriesUseCase(categoryRepo)
+	updateCategoryUC := appCategory.NewUpdateCategoryUseCase(categoryRepo)
+	deleteCategoryUC := appCategory.NewDeleteCategoryUseCase(categoryRepo)
+
+	productHandler := handler.NewProductHandler(
+		createProductUC,
+		getProductUC,
+		getProductsUC,
+		updateProductUC,
+		deleteProductUC,
+	)
+
+	categoryHandler := handler.NewCategoryHandler(
+		createCategoryUC,
+		getCategoryUC,
+		getCategoriesUC,
+		updateCategoryUC,
+		deleteCategoryUC,
+	)
 
 	handlers := &router.Handlers{
-		Product: productHandler,
+		Product:  productHandler,
+		Category: categoryHandler,
 	}
 
 	mux := http.NewServeMux()
@@ -138,14 +169,16 @@ func configureServer(appConfig *config.Config, db *postgres.DB) (*http.Server, e
 }
 
 func runMigrations(logger *slog.Logger, dbUrl string) error {
-	m, err := migrate.New("file://migrations", dbUrl)
+	m, err := migrate.New(
+		"file://migrations",
+		dbUrl,
+	)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create migration: %w", err)
 	}
-	defer m.Close()
 
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		return err
+		return fmt.Errorf("migration failed: %w", err)
 	}
 
 	logger.Info("migrations applied successfully")

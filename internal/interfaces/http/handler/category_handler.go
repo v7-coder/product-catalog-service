@@ -5,22 +5,22 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/v7-coder/product-catalog-service/internal/application/product"
+	"github.com/v7-coder/product-catalog-service/internal/application/category"
 	httpdto "github.com/v7-coder/product-catalog-service/internal/interfaces/http/dto"
 	"github.com/v7-coder/product-catalog-service/internal/pkg/app"
 	"github.com/v7-coder/product-catalog-service/internal/pkg/validator"
 )
 
-type ProductHandler struct {
-	createUC  *product.CreateProductUseCase
-	getUC     *product.GetProductUseCase
-	getListUC *product.GetProductsUseCase
-	updateUC  *product.UpdateProductUseCase
-	deleteUC  *product.DeleteProductUseCase
+type CategoryHandler struct {
+	createUC  *category.CreateCategoryUseCase
+	getUC     *category.GetCategoryUseCase
+	getListUC *category.GetCategoriesUseCase
+	updateUC  *category.UpdateCategoryUseCase
+	deleteUC  *category.DeleteCategoryUseCase
 }
 
-func NewProductHandler(createUC *product.CreateProductUseCase, getUC *product.GetProductUseCase, getListUC *product.GetProductsUseCase, updateUC *product.UpdateProductUseCase, deleteUC *product.DeleteProductUseCase) *ProductHandler {
-	return &ProductHandler{
+func NewCategoryHandler(createUC *category.CreateCategoryUseCase, getUC *category.GetCategoryUseCase, getListUC *category.GetCategoriesUseCase, updateUC *category.UpdateCategoryUseCase, deleteUC *category.DeleteCategoryUseCase) *CategoryHandler {
+	return &CategoryHandler{
 		createUC:  createUC,
 		getUC:     getUC,
 		getListUC: getListUC,
@@ -29,10 +29,10 @@ func NewProductHandler(createUC *product.CreateProductUseCase, getUC *product.Ge
 	}
 }
 
-func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
+func (h *CategoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	var createRequest httpdto.CreateProductRequest
+	var createRequest httpdto.CreateCategoryRequest
 
 	// Декодируем JSON
 	if err := json.NewDecoder(r.Body).Decode(&createRequest); err != nil {
@@ -45,11 +45,9 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cmd := product.CreateProductCommand{
+	cmd := category.CreateCategoryCommand{
 		Name:        createRequest.Name,
 		Description: createRequest.Description,
-		Price:       createRequest.Price,
-		CategoryId:  createRequest.CategoryId,
 	}
 
 	result, err := h.createUC.Execute(r.Context(), cmd)
@@ -61,15 +59,15 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 	app.SendSuccess(w, http.StatusCreated, result)
 }
 
-func (h *ProductHandler) Get(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("productId")
+func (h *CategoryHandler) Get(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("categoryId")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		app.SendError(w, http.StatusBadRequest, "invalid product ID")
+		app.SendError(w, http.StatusBadRequest, "invalid category ID")
 		return
 	}
 
-	cmd := product.GetProductCommand{
+	cmd := category.GetCategoryCommand{
 		ID: id,
 	}
 
@@ -82,7 +80,7 @@ func (h *ProductHandler) Get(w http.ResponseWriter, r *http.Request) {
 	app.SendSuccess(w, http.StatusOK, result)
 }
 
-func (h *ProductHandler) GetList(w http.ResponseWriter, r *http.Request) {
+func (h *CategoryHandler) GetList(w http.ResponseWriter, r *http.Request) {
 	limitStr := r.URL.Query().Get("limit")
 	if limitStr == "" {
 		limitStr = "50"
@@ -103,7 +101,7 @@ func (h *ProductHandler) GetList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cmd := product.GetProductsCommand{
+	cmd := category.GetCategoriesCommand{
 		Limit:  limit,
 		Offset: offset,
 	}
@@ -117,17 +115,17 @@ func (h *ProductHandler) GetList(w http.ResponseWriter, r *http.Request) {
 	app.SendSuccess(w, http.StatusOK, result)
 }
 
-func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("productId")
+func (h *CategoryHandler) Update(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("categoryId")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		app.SendError(w, http.StatusBadRequest, "invalid product ID")
+		app.SendError(w, http.StatusBadRequest, "invalid category ID")
 		return
 	}
 
 	defer r.Body.Close()
 
-	var updateRequest httpdto.UpdateProductRequest
+	var updateRequest httpdto.UpdateCategoryRequest
 
 	// Декодируем JSON
 	if err := json.NewDecoder(r.Body).Decode(&updateRequest); err != nil {
@@ -140,12 +138,10 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cmd := product.UpdateProductCommand{
+	cmd := category.UpdateCategoryCommand{
 		ID:          id,
 		Name:        updateRequest.Name,
 		Description: updateRequest.Description,
-		Price:       updateRequest.Price,
-		CategoryId:  updateRequest.CategoryId,
 	}
 
 	result, err := h.updateUC.Execute(r.Context(), cmd)
@@ -157,15 +153,15 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 	app.SendSuccess(w, http.StatusOK, result)
 }
 
-func (h *ProductHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("productId")
+func (h *CategoryHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("categoryId")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		app.SendError(w, http.StatusBadRequest, "invalid product ID")
+		app.SendError(w, http.StatusBadRequest, "invalid category ID")
 		return
 	}
 
-	cmd := product.DeleteProductCommand{
+	cmd := category.DeleteCategoryCommand{
 		ID: id,
 	}
 
