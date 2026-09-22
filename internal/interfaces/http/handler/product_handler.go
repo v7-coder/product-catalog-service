@@ -3,7 +3,6 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 
 	"github.com/v7-coder/product-catalog-service/internal/application/product"
 	httpdto "github.com/v7-coder/product-catalog-service/internal/interfaces/http/dto"
@@ -12,21 +11,11 @@ import (
 )
 
 type ProductHandler struct {
-	createUC  *product.CreateProductUseCase
-	getUC     *product.GetProductUseCase
-	getListUC *product.GetProductsUseCase
-	updateUC  *product.UpdateProductUseCase
-	deleteUC  *product.DeleteProductUseCase
+	createUC *product.CreateProductUseCase
 }
 
-func NewProductHandler(createUC *product.CreateProductUseCase, getUC *product.GetProductUseCase, getListUC *product.GetProductsUseCase, updateUC *product.UpdateProductUseCase, deleteUC *product.DeleteProductUseCase) *ProductHandler {
-	return &ProductHandler{
-		createUC:  createUC,
-		getUC:     getUC,
-		getListUC: getListUC,
-		updateUC:  updateUC,
-		deleteUC:  deleteUC,
-	}
+func NewCreateProductHandler(createUC *product.CreateProductUseCase) *ProductHandler {
+	return &ProductHandler{createUC: createUC}
 }
 
 func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -59,121 +48,4 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.SendSuccess(w, http.StatusCreated, result)
-}
-
-func (h *ProductHandler) Get(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("productId")
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		app.SendError(w, http.StatusBadRequest, "invalid product ID")
-		return
-	}
-
-	cmd := product.GetProductCommand{
-		ID: id,
-	}
-
-	result, err := h.getUC.Execute(r.Context(), cmd)
-	if err != nil {
-		app.SendError(w, http.StatusNotFound, err.Error())
-		return
-	}
-
-	app.SendSuccess(w, http.StatusOK, result)
-}
-
-func (h *ProductHandler) GetList(w http.ResponseWriter, r *http.Request) {
-	limitStr := r.URL.Query().Get("limit")
-	if limitStr == "" {
-		limitStr = "50"
-	}
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil {
-		app.SendError(w, http.StatusBadRequest, "invalid limit parameter")
-		return
-	}
-
-	offsetStr := r.URL.Query().Get("offset")
-	if offsetStr == "" {
-		offsetStr = "0"
-	}
-	offset, err := strconv.Atoi(offsetStr)
-	if err != nil {
-		app.SendError(w, http.StatusBadRequest, "invalid offset parameter")
-		return
-	}
-
-	cmd := product.GetProductsCommand{
-		Limit:  limit,
-		Offset: offset,
-	}
-
-	result, err := h.getListUC.Execute(r.Context(), cmd)
-	if err != nil {
-		app.SendError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	app.SendSuccess(w, http.StatusOK, result)
-}
-
-func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("productId")
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		app.SendError(w, http.StatusBadRequest, "invalid product ID")
-		return
-	}
-
-	defer r.Body.Close()
-
-	var updateRequest httpdto.UpdateProductRequest
-
-	// Декодируем JSON
-	if err := json.NewDecoder(r.Body).Decode(&updateRequest); err != nil {
-		app.SendError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
-		return
-	}
-
-	if err := validator.Validate(updateRequest); err != nil {
-		app.SendError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	cmd := product.UpdateProductCommand{
-		ID:          id,
-		Name:        updateRequest.Name,
-		Description: updateRequest.Description,
-		Price:       updateRequest.Price,
-		CategoryId:  updateRequest.CategoryId,
-	}
-
-	result, err := h.updateUC.Execute(r.Context(), cmd)
-	if err != nil {
-		app.SendError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	app.SendSuccess(w, http.StatusOK, result)
-}
-
-func (h *ProductHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("productId")
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		app.SendError(w, http.StatusBadRequest, "invalid product ID")
-		return
-	}
-
-	cmd := product.DeleteProductCommand{
-		ID: id,
-	}
-
-	result, err := h.deleteUC.Execute(r.Context(), cmd)
-	if err != nil {
-		app.SendError(w, http.StatusNotFound, err.Error())
-		return
-	}
-
-	app.SendSuccess(w, http.StatusOK, result)
 }
