@@ -30,13 +30,17 @@ func main() {
 		Level: slog.LevelInfo,
 	}))
 
+	// Контекст, который отменится по SIGINT/SIGTERM
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	appConfig, err := config.Load()
 	if err != nil {
 		logger.Error("failed to load config", slog.Any("error", err))
 		os.Exit(1)
 	}
 
-	if err := run(logger, appConfig); err != nil {
+	if err := run(ctx, logger, appConfig); err != nil {
 		logger.Error("application failed", slog.Any("error", err))
 		os.Exit(1)
 	}
@@ -44,14 +48,14 @@ func main() {
 	logger.Info("application stopped gracefully")
 }
 
-func run(logger *slog.Logger, appConfig *config.Config) error {
-	db, err := connectWithRetry(logger, appConfig.DBUrl)
+func run(ctx context.Context, logger *slog.Logger, appConfig *config.Config) error {
+	db, err := connectWithRetry(ctx, logger, appConfig.DBUrl)
 	if err != nil {
 		return fmt.Errorf("database connection: %w", err)
 	}
 	defer db.Close()
 
-	if err := runMigrations(logger, appConfig.DBUrl); err != nil {
+	if err := runMigrations(ctx, logger, appConfig.DBUrl); err != nil {
 		return fmt.Errorf("migration error: %w", err)
 	}
 
@@ -69,12 +73,9 @@ func run(logger *slog.Logger, appConfig *config.Config) error {
 		}
 	}()
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-
 	select {
-	case sig := <-quit:
-		logger.Info("received shutdown signal", slog.String("signal", sig.String()))
+	case <-ctx.Done():
+		logger.Info("received shutdown signal", slog.String("reason", ctx.Err().Error()))
 	case err := <-errChan:
 		return fmt.Errorf("server failed: %w", err)
 	}
@@ -91,12 +92,12 @@ func run(logger *slog.Logger, appConfig *config.Config) error {
 	return nil
 }
 
-func connectWithRetry(logger *slog.Logger, dbUrl string) (*postgres.DB, error) {
+func connectWithRetry(ctx context.Context, logger *slog.Logger, dbUrl string) (*postgres.DB, error) {
 	var db *postgres.DB
 	var err error
 
 	for i := 0; i < 30; i++ {
-		db, err = postgres.NewDB(dbUrl)
+		db, err = postgres.NewDB(ctx, dbUrl)
 		if err == nil {
 			logger.Info("connected to database")
 			return db, nil
@@ -104,8 +105,14 @@ func connectWithRetry(logger *slog.Logger, dbUrl string) (*postgres.DB, error) {
 		logger.Warn("waiting for database...",
 			slog.Int("attempt", i+1),
 			slog.Int("max_attempts", 30),
+			slog.String("error", err.Error()),
 		)
-		time.Sleep(time.Second)
+
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
+		case <-time.After(time.Second):
+		}
 	}
 
 	return nil, fmt.Errorf("database not available after 30 attempts: %w", err)
@@ -137,7 +144,11 @@ func configureServer(appConfig *config.Config, db *postgres.DB) (*http.Server, e
 	}, nil
 }
 
-func runMigrations(logger *slog.Logger, dbUrl string) error {
+func runMigrations(ctx context.Context, logger *slog.Logger, dbUrl string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	m, err := migrate.New("file://migrations", dbUrl)
 	if err != nil {
 		return err

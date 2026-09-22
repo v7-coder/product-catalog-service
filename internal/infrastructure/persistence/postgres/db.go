@@ -1,6 +1,8 @@
 package postgres
 
 import (
+	"context"
+	"fmt"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -10,16 +12,21 @@ type DB struct {
 	*sqlx.DB
 }
 
-func NewDB(dsn string) (*DB, error) {
-	db, err := sqlx.Connect("postgres", dsn)
+func NewDB(ctx context.Context, dsn string) (*DB, error) {
+	db, err := sqlx.Open("postgres", dsn)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open db: %w", err)
 	}
 
-	db.SetMaxOpenConns(50) // Максимум открытых соединений
-	db.SetMaxIdleConns(25) // Простаивающие соединения
+	db.SetMaxOpenConns(20)
+	db.SetMaxIdleConns(10)
 	db.SetConnMaxLifetime(5 * time.Minute)
 	db.SetConnMaxIdleTime(2 * time.Minute)
+
+	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("ping db: %w", err)
+	}
 
 	return &DB{db}, nil
 }
