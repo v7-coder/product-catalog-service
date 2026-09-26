@@ -3,6 +3,7 @@ package product
 type Product struct {
 	ID          int     `json:"id" db:"id"`
 	Name        string  `json:"name" db:"name"`
+	Slug        string  `json:"slug" db:"slug"`
 	Description string  `json:"description" db:"description"`
 	Price       float64 `json:"price" db:"price"`
 	CategoryId  int     `json:"categoryId" db:"category_id"`

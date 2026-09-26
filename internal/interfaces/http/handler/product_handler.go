@@ -2,9 +2,11 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/v7-coder/product-catalog-service/internal/application/product"
+	domainProduct "github.com/v7-coder/product-catalog-service/internal/domain/product"
 	httpdto "github.com/v7-coder/product-catalog-service/internal/interfaces/http/dto"
 	"github.com/v7-coder/product-catalog-service/internal/pkg/app"
 	"github.com/v7-coder/product-catalog-service/internal/pkg/validator"
@@ -43,6 +45,11 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.createUC.Execute(r.Context(), cmd)
 	if err != nil {
+		if errors.Is(err, domainProduct.ErrSlugAlreadyExists) {
+			app.SendError(w, http.StatusConflict, "slug already exists")
+			return
+		}
+
 		app.SendError(w, http.StatusBadRequest, err.Error())
 		return
 	}
